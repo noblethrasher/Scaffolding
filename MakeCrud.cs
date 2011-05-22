@@ -15,8 +15,6 @@ using Scaffolding;
 
 namespace Sql_Object_Generator
 {
-  
-
     static class MakeCreateUpdateDelete
     {
 
@@ -55,11 +53,14 @@ namespace Sql_Object_Generator
             { typeof(object), "GetValue" },
             
             {typeof(char), "GetChar"},
-            {typeof(char?), "GetChar"}
+            {typeof(char?), "GetChar"},
+
+            {typeof(Guid), "GetGuid"},
+            {typeof(Guid?), "GetGuid"},
             
         };
 
-        public static string GetReaderMethod(Type type)
+        static string GetReaderMethod(Type type)
         {
             var method = "GetValue";
 
@@ -143,6 +144,89 @@ namespace Sql_Object_Generator
 
         }
 
+
+
+        public static string CreateStandardImplementation(this Type type, int n = 0)
+        {
+            var sb = new StringBuilder ();
+
+
+            var types = type.GetInterfaces ().Where (x => x.GetCustomAttributes (typeof (RelationAttribute), false).Length > 0).Union (new[] { type });
+
+            foreach (var t in types)
+            {
+
+                var relName = (RelationAttribute) t.GetCustomAttributes (typeof (RelationAttribute), false)[0];
+                
+                sb.AppendLine (string.Format ("public partial class {0} : {2}, {1}", relName.RelationText, t.Name, "DataContext"), n);
+                sb.AppendLine ("{", n);
+
+
+
+                foreach (var property in t.GetProperties ().Where (x => x.GetCustomAttributes (typeof (ColumnAttribute), false).Length > 0))
+                {
+                    
+                    var propName = property.Name.Split('_').Aggregate("", (x, y) => x + y.Capitalize() );
+                    var colAttr = ((ColumnAttribute)property.GetCustomAttributes (typeof (ColumnAttribute), false)[0]);
+                    var prv_fld = " m__" + property.Name;
+
+                    sb.AppendLine (property.PropertyType.GetFriendlyClrName () + prv_fld + ";", n + 1); 
+                    sb.AppendLine (string.Format ("public {0} {1}", property.PropertyType.GetFriendlyClrName(), propName), n + 1);
+                    sb.AppendLine ("{", n + 1);
+
+                    sb.AppendLine ("get", n + 2);
+                    sb.AppendLine ("{", n + 2);
+                    sb.AppendLine ("return " + prv_fld + ";", n + 3);
+
+                    sb.AppendLine ("}", n + 2);
+
+
+                    if (!colAttr.ReadOnly)
+                    {
+                        sb.AppendLine ("set", n + 2);
+                        sb.AppendLine ("{", n + 2);
+                        sb.AppendLine (prv_fld + " = value;", n + 3);
+
+                        sb.AppendLine ("}", n + 2);
+                    }
+
+
+                    sb.AppendLine ("}", n + 1);
+
+                    sb.AppendLine ();
+
+
+                    sb.AppendLine (property.PropertyType.GetFriendlyClrName () + " " + t.Name + "." + property.Name, n + 1);
+                    sb.AppendLine ("{", n + 1);
+
+                    sb.AppendLine ("get", n + 2);
+                    sb.AppendLine ("{", n + 2);
+                    sb.AppendLine ("return " + prv_fld + ";", n + 3);
+                    sb.AppendLine ("}", n + 2);
+                    sb.AppendLine ();
+
+
+                    sb.AppendLine ("set", n + 2);
+                    sb.AppendLine ("{", n + 2);
+                    sb.AppendLine (prv_fld + " = value;", n + 3);
+                    sb.AppendLine ("}", n + 2);
+
+                    sb.AppendLine ("}", n + 1);
+                    sb.AppendLine ();
+
+
+                }
+
+
+
+                sb.AppendLine ("}", n);
+
+            }
+
+
+            return sb.ToString ();
+        }
+
         public static string MakeParameter(PropertyInfo pi)
         {
             var attrs = pi.GetCustomAttributes (typeof (ColumnAttribute), false).Select (x => x as ColumnAttribute);
@@ -156,6 +240,9 @@ namespace Sql_Object_Generator
 
             return "Command.Parameters.AddWithValue(\"" + name + "\", " + "obj." + pi.Name + ");";
         }
+
+
+
     }
 
 
@@ -178,6 +265,7 @@ namespace Sql_Object_Generator
         {
             var sb = new StringBuilder ();
 
+            sb.AppendLine (string.Format ("[Relation(\"{0}\")]", table.Name));
             sb.AppendLine ("public partial interface _" + Name, n);
             sb.AppendLine ("{", n);
 
@@ -210,7 +298,10 @@ namespace Sql_Object_Generator
         {
             var sb = new StringBuilder();
 
-            var columnAttribute = "[Column(\"" + column.Name + "\")]";
+
+            var args = new[] { "\"" + column.Name + "\"", column.IsReadOnly ().ToString ().ToLower (), column.InPrimaryKey.ToString ().ToLower () }.Join (",");
+
+            var columnAttribute = "[Column(" + args + ")]";
 
             sb.AppendLine (columnAttribute, n + 1);
 

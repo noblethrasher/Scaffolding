@@ -11,6 +11,20 @@ namespace Sql_Object_Generator
     static class Utils
     {
 
+        public static string Capitalize(this string s)
+        {
+            if(s != null && s.Length > 0)
+            {
+                var chars = s.ToCharArray ();
+                chars[0] = char.ToUpper(chars[0]);
+
+                return new string(chars);
+            }
+
+            return s;
+        }
+        
+        
         static public IEnumerable<Table> GetParentTables(this Table table)
         {
             var db = table.Parent;
@@ -148,7 +162,8 @@ namespace Sql_Object_Generator
                 {"Int16", "short"},                
                 {"Byte", "byte"},
                 {"Double", "double"},
-                {"Decimal", "decimal"}
+                {"Decimal", "decimal"},
+                {"Object", "object"}
             };
 
         private static string GetCSharpTypeAlias(string Name)

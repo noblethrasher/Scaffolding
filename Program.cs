@@ -10,6 +10,8 @@ using Microsoft.CSharp;
 using System.CodeDom.Compiler;
 using CodeGeneration;
 
+
+
 namespace Sql_Object_Generator
 {
     class Program
@@ -55,7 +57,7 @@ namespace Sql_Object_Generator
                 {
                     conn_str = args[c + 1];
 
-                    datasource = args[c + 1].Split (';').Where (x => x.Trim().StartsWith ("initial", StringComparison.OrdinalIgnoreCase)).ElementAt (0).Split ('=')[1];
+                    datasource = args[c + 1].Split (';').Where (x => x.Trim().StartsWith ("initial", StringComparison.OrdinalIgnoreCase)).ElementAt (0).Split ('=')[1].Trim();
                 }
             }
             else
@@ -74,7 +76,7 @@ namespace Sql_Object_Generator
                 {
                     conn_str += "data source = " + args[ds + 1] + "; " + "initial catalog = " + args[ct + 1];
 
-                    datasource = args[ct + 1];
+                    datasource = args[ct + 1].Trim ();
                 }
 
                 if (has_un_and_pw)
@@ -94,13 +96,13 @@ namespace Sql_Object_Generator
             var conn = new SqlConnection (conn_str);
             var server = new Server (new ServerConnection (conn));
 
-            var database = server.Databases[datasource.Trim()];
-            var tables = database.Tables.ToEnumerable ();
+            var database = server.Databases[datasource];
+            var tables = database.Tables.ToEnumerable ().Where(x => !x.IsSystemObject);
 
             var sb = new StringBuilder ();
             sb.AppendLine ("using System;");
             sb.AppendLine ("using Scaffolding;");
-            sb.AppendLine ("namespace " + datasource.Trim ());
+            sb.AppendLine ("namespace " + datasource);
             sb.AppendLine ("{");
 
             var list = new List<Table> ();
@@ -122,16 +124,16 @@ namespace Sql_Object_Generator
 
             sb.AppendLine ("}");
 
-            var writer = new StreamWriter (Path.Combine (path, "foo.cs"));
+            var writer = new StreamWriter (Path.Combine (path, datasource + ".cs"));
 
             writer.Write (sb.ToString ());
 
             writer.Close ();
 
-            CreateHelperMethods ();
+            CreateHelperMethods (datasource);
         }
 
-        static void CreateHelperMethods()
+        static void CreateHelperMethods(string dbName)
         {
             var compiler = new CSharpCodeProvider ();
 
@@ -144,7 +146,7 @@ namespace Sql_Object_Generator
             options.ReferencedAssemblies.Add ("System.Data.dll");
             options.ReferencedAssemblies.Add ("System.dll");
 
-            var results = compiler.CompileAssemblyFromFile (options, Path.Combine(path, "foo.cs"));
+            var results = compiler.CompileAssemblyFromFile (options, Path.Combine(path, dbName + ".cs"));
 
             if (results.Errors.HasErrors)
             {
@@ -161,12 +163,13 @@ namespace Sql_Object_Generator
                 sb.AppendLine ("using System.Data;");
                 sb.AppendLine ("using System.Data.SqlClient;");
                 sb.AppendLine ("using Scaffolding;");
+                sb.AppendLine ("using " + dbName + ";");
 
                 sb.AppendLine ();
                 sb.AppendLine ("namespace DbHelpers");
                 sb.AppendLine ("{");
 
-                sb.AppendLine ("public static class DbUtils", 1);
+                sb.AppendLine ("public static partial class DbUtils", 1);
                 sb.AppendLine("{", 1);
 
                 foreach (var type in types)
@@ -187,8 +190,26 @@ namespace Sql_Object_Generator
 
                 sw.Write (sb.ToString ());
                 sw.Close ();
+
+
+                var implWriter = new StreamWriter (Path.Combine (path, "standard implementations.cs"));
+
+                sb.Clear ();
+
+                sb.AppendLine ("public abstract partial class DataContext");
+                sb.AppendLine ("{");
+
+                foreach (var type in types)
+                {
+                    sb.AppendLine (type.CreateStandardImplementation (1));
+                }
+                sb.AppendLine ("}");
+
+                implWriter.WriteLine (sb.ToString ());
+                implWriter.Close ();
             }
 
+           
         }
     }
 }
